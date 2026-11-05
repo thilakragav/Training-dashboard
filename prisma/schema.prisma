@@ -1,0 +1,417 @@
+// Prisma Schema for Nexora Tech Academy
+// Designed for PostgreSQL (compatible with Supabase, Neon, AWS RDS, Railway, and Docker)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleType {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL_LEVELS
+}
+
+enum DeliveryMode {
+  LIVE_ONLINE
+  HYBRID
+  CLASSROOM
+}
+
+enum EnrollmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  PAUSED
+  DROPPED
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  ENROLLED
+  CLOSED
+}
+
+enum EnquiryType {
+  GENERAL_ENQUIRY
+  COUNSELLING_BOOKING
+  WORKSHOP_REGISTRATION
+  CORPORATE_TRAINING
+}
+
+enum LessonType {
+  VIDEO
+  READING
+  CODE_LAB
+  QUIZ
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  GRADED
+  RESUBMISSION_REQUESTED
+}
+
+// 1. Roles
+model Role {
+  id          String   @id @default(uuid())
+  name        RoleType @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  users       User[]
+
+  @@map("roles")
+}
+
+// 2. Users
+model User {
+  id           String          @id @default(uuid())
+  email        String          @unique
+  passwordHash String          @map("password_hash")
+  fullName     String          @map("full_name")
+  phone        String?
+  avatarUrl    String?         @map("avatar_url")
+  roleId       String          @map("role_id")
+  role         Role            @relation(fields: [roleId], references: [id])
+  isActive     Boolean         @default(true) @map("is_active")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  profile      StudentProfile?
+  enrollments  Enrollment[]
+  progress     LessonProgress[]
+  quizAttempts QuizAttempt[]
+  submissions  AssignmentSubmission[]
+  certificates Certificate[]
+  registrations WorkshopRegistration[]
+  notifications Notification[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// 3. Student Profiles
+model StudentProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  educationLevel  String?  @map("education_level") // College student, Graduate, etc.
+  collegeOrCompany String? @map("college_or_company")
+  targetCareerPath String? @map("target_career_path") // AI Engineer, Full-Stack, etc.
+  streakDays      Int      @default(1) @map("streak_days")
+  lastActiveAt    DateTime @default(now()) @map("last_active_at")
+  bio             String?
+  githubProfile   String?  @map("github_profile")
+  linkedinProfile String?  @map("linkedin_profile")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("student_profiles")
+}
+
+// 4. Courses
+model Course {
+  id                 String       @id @default(uuid())
+  slug               String       @unique
+  title              String
+  shortDescription   String       @map("short_description")
+  longDescription    String       @map("long_description")
+  category           String
+  level              SkillLevel   @default(BEGINNER)
+  durationWeeks      Int          @map("duration_weeks")
+  totalHours         Int          @map("total_hours")
+  deliveryMode       DeliveryMode @default(HYBRID) @map("delivery_mode")
+  technologies       String[]     // Array of tech tags (e.g. ['PyTorch', 'Docker'])
+  feeTotal           Decimal?     @map("fee_total") @db.Decimal(10, 2)
+  feeCurrency        String       @default("INR") @map("fee_currency")
+  emiStartsAt        Decimal?     @map("emi_starts_at") @db.Decimal(10, 2)
+  isScholarshipAvail Boolean      @default(false) @map("is_scholarship_avail")
+  rating             Decimal      @default(4.9) @db.Decimal(3, 2)
+  reviewCount        Int          @default(0) @map("review_count")
+  enrolledCount      Int          @default(0) @map("enrolled_count")
+  badge              String?
+  highlights         String[]
+  prerequisites      String[]
+  targetAudience     String[]     @map("target_audience")
+  learningOutcomes   String[]     @map("learning_outcomes")
+  capstoneTitle      String?      @map("capstone_title")
+  capstoneDesc       String?      @map("capstone_desc")
+  capstoneTechStack  String[]     @map("capstone_tech_stack")
+  instructorName     String       @map("instructor_name")
+  instructorTitle    String       @map("instructor_title")
+  instructorBio      String?      @map("instructor_bio")
+  instructorAvatar   String?      @map("instructor_avatar")
+  isFeatured         Boolean      @default(false) @map("is_featured")
+  isPublished        Boolean      @default(true) @map("is_published")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  modules            CourseModule[]
+  enrollments        Enrollment[]
+  assignments        Assignment[]
+  certificates       Certificate[]
+
+  @@index([slug])
+  @@index([category])
+  @@map("courses")
+}
+
+// 5. Course Modules
+model CourseModule {
+  id                 String   @id @default(uuid())
+  courseId           String   @map("course_id")
+  course             Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  moduleNumber       Int      @map("module_number")
+  title              String
+  description        String
+  durationHours      Int      @map("duration_hours")
+  learningObjectives String[] @map("learning_objectives")
+  handsOnLab         String?  @map("hands_on_lab")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  lessons            Lesson[]
+  quizzes            Quiz[]
+
+  @@unique([courseId, moduleNumber])
+  @@map("course_modules")
+}
+
+// 6. Lessons
+model Lesson {
+  id              String         @id @default(uuid())
+  moduleId        String         @map("module_id")
+  module          CourseModule   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  lessonNumber    Int            @map("lesson_number")
+  title           String
+  durationMinutes Int            @map("duration_minutes")
+  type            LessonType     @default(VIDEO)
+  contentBody     String?        @map("content_body") // Markdown or article content
+  videoUrl        String?        @map("video_url")
+  codeSnippet     String?        @map("code_snippet")
+  resourceUrls    Json?          @map("resource_urls")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  progressRecords LessonProgress[]
+
+  @@unique([moduleId, lessonNumber])
+  @@map("lessons")
+}
+
+// 7. Enrollments
+model Enrollment {
+  id                   String           @id @default(uuid())
+  userId               String           @map("user_id")
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId             String           @map("course_id")
+  course               Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  completionPercentage Int              @default(0) @map("completion_percentage")
+  status               EnrollmentStatus @default(IN_PROGRESS)
+  lastAccessedLessonId String?          @map("last_accessed_lesson_id")
+  enrolledAt           DateTime         @default(now()) @map("enrolled_at")
+  completedAt          DateTime?        @map("completed_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@map("enrollments")
+}
+
+// 8. Lesson Progress
+model LessonProgress {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String   @map("lesson_id")
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  isCompleted Boolean  @default(false) @map("is_completed")
+  completedAt DateTime? @map("completed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+// 9. Quizzes
+model Quiz {
+  id          String       @id @default(uuid())
+  moduleId    String       @map("module_id")
+  module      CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title       String
+  passingScore Int         @default(75) @map("passing_score")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  questions   QuizQuestion[]
+  attempts    QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+// 10. Quiz Questions
+model QuizQuestion {
+  id            String   @id @default(uuid())
+  quizId        String   @map("quiz_id")
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  questionText  String   @map("question_text")
+  codeSnippet   String?  @map("code_snippet")
+  options       String[]
+  correctIndex  Int      @map("correct_index")
+  explanation   String
+  orderNumber   Int      @map("order_number")
+
+  @@map("quiz_questions")
+}
+
+// 11. Quiz Attempts
+model QuizAttempt {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId      String   @map("quiz_id")
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  score       Int
+  isPassed    Boolean  @map("is_passed")
+  userAnswers Json     @map("user_answers") // record of chosen indexes
+  attemptedAt DateTime @default(now()) @map("attempted_at")
+
+  @@map("quiz_attempts")
+}
+
+// 12. Assignments
+model Assignment {
+  id             String   @id @default(uuid())
+  courseId       String   @map("course_id")
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  rubricCriteria Json?    @map("rubric_criteria")
+  dueDate        DateTime? @map("due_date")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  submissions    AssignmentSubmission[]
+
+  @@map("assignments")
+}
+
+// 13. Assignment Submissions
+model AssignmentSubmission {
+  id           String           @id @default(uuid())
+  assignmentId String           @map("assignment_id")
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  userId       String           @map("user_id")
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubRepo   String           @map("github_repo")
+  demoUrl      String?          @map("demo_url")
+  notes        String?
+  status       SubmissionStatus @default(SUBMITTED)
+  gradeScore   Int?             @map("grade_score")
+  mentorFeedback String?        @map("mentor_feedback")
+  submittedAt  DateTime         @default(now()) @map("submitted_at")
+  gradedAt     DateTime?        @map("graded_at")
+
+  @@map("assignment_submissions")
+}
+
+// 14. Certificates
+model Certificate {
+  id               String   @id @default(uuid())
+  certificateNumber String  @unique @map("certificate_number")
+  userId           String   @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId         String   @map("course_id")
+  course           Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  grade            String   @default("Distinction (Grade A+)")
+  skillsVerified   String[] @map("skills_verified")
+  verificationUrl  String   @map("verification_url")
+  issuedAt         DateTime @default(now()) @map("issued_at")
+
+  @@index([certificateNumber])
+  @@map("certificates")
+}
+
+// 15. Workshops
+model Workshop {
+  id              String   @id @default(uuid())
+  title           String
+  subtitle        String
+  instructorName  String   @map("instructor_name")
+  instructorRole  String   @map("instructor_role")
+  scheduledDate   DateTime @map("scheduled_date")
+  duration        String
+  seatsTotal      Int      @map("seats_total")
+  seatsRegistered Int      @default(0) @map("seats_registered")
+  topics          String[]
+  prerequisites   String?
+  isFree          Boolean  @default(true) @map("is_free")
+  zoomLink        String?  @map("zoom_link")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  registrations   WorkshopRegistration[]
+
+  @@map("workshops")
+}
+
+// 16. Workshop Registrations
+model WorkshopRegistration {
+  id           String   @id @default(uuid())
+  workshopId   String   @map("workshop_id")
+  workshop     Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  userId       String?  @map("user_id")
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName     String   @map("full_name")
+  email        String
+  phone        String
+  registeredAt DateTime @default(now()) @map("registered_at")
+
+  @@map("workshop_registrations")
+}
+
+// 17. Enquiries
+model Enquiry {
+  id               String        @id @default(uuid())
+  fullName         String        @map("full_name")
+  email            String
+  phone            String
+  courseInterest   String        @map("course_interest")
+  preferredMode    String?       @map("preferred_mode")
+  qualification    String?
+  message          String?
+  preferredDate    String?       @map("preferred_date")
+  preferredTimeSlot String?      @map("preferred_time_slot")
+  type             EnquiryType   @default(GENERAL_ENQUIRY)
+  status           EnquiryStatus @default(NEW)
+  internalNotes    String?       @map("internal_notes")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([email])
+  @@map("enquiries")
+}
+
+// 18. Notifications
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("notifications")
+}
